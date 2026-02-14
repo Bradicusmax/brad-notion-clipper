@@ -1,0 +1,203 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: #1a1a1a;
+  color: #ffffff;
+  min-width: 400px;
+}
+
+.container {
+  padding: 20px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #333;
+}
+
+h1 {
+  font-size: 20px;
+}
+
+h2 {
+  font-size: 16px;
+  margin-bottom: 12px;
+  color: #fff;
+}
+
+h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #ddd;
+}
+
+.section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #242424;
+  border-radius: 12px;
+}
+
+.section p {
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 16px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Auth Methods */
+.auth-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.method {
+  padding: 16px;
+  background: #1a1a1a;
+  border-radius: 8px;
+}
+
+.method p {
+  margin-bottom: 12px;
+}
+
+/* Form */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 6px;
+}
+
+.form-group input {
+  width: 100%;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  padding: 10px;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #5e6ad2;
+}
+
+.form-group small {
+  display: block;
+  font-size: 11px;
+  color: #666;
+  margin-top: 6px;
+}
+
+.button-group {
+  display: flex;
+  gap: 12px;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #5e6ad2;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #4a5abc;
+}
+
+.btn-secondary {
+  background: #333;
+  color: #fff;
+}
+
+.btn-secondary:hover {
+  background: #444;
+}
+
+.btn-danger {
+  background: #c62828;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #b71c1c;
+}
+
+/* Connected Status */
+.connected-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(46, 125, 50, 0.2);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.check {
+  color: #81c784;
+  font-size: 18px;
+}
+
+/* Instructions */
+.instructions {
+  padding-left: 20px;
+}
+
+.instructions li {
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.instructions a {
+  color: #5e6ad2;
+  text-decoration: none;
+}
+
+.instructions a:hover {
+  text-decoration: underline;
+}
+
+/* Footer */
+footer {
+  text-align: center;
+  padding-top: 16px;
+  border-top: 1px solid #333;
+}
+
+#version {
+  font-size: 12px;
+  color: #666;
+}
