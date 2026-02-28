@@ -218,6 +218,10 @@ textarea::placeholder {
   color: #e8a517;
 }
 
+.destination-item .db-icon {
+  color: #5e6ad2;
+}
+
 .destination-no-results {
   padding: 10px 12px;
   font-size: 13px;
