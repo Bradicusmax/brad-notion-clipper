@@ -128,34 +128,53 @@ async function loadDestinations() {
 }
 
 async function fetchNotionPages(token) {
-  const response = await fetch('https://api.notion.com/v1/search', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Notion-Version': '2022-06-28',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      filter: {
-        property: 'object',
-        value: 'page'
+  // Fetch both pages and databases
+  const [pagesRes, dbsRes] = await Promise.all([
+    fetch('https://api.notion.com/v1/search', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
       },
-      page_size: 50
+      body: JSON.stringify({
+        filter: { property: 'object', value: 'page' },
+        page_size: 50
+      })
+    }),
+    fetch('https://api.notion.com/v1/search', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        filter: { property: 'object', value: 'database' },
+        page_size: 50
+      })
     })
-  });
+  ]);
 
-  if (!response.ok) {
+  if (!pagesRes.ok || !dbsRes.ok) {
     throw new Error('Failed to fetch pages');
   }
 
-  const data = await response.json();
+  const [pagesData, dbsData] = await Promise.all([pagesRes.json(), dbsRes.json()]);
 
-  return data.results.map(page => {
+  const pages = pagesData.results.map(page => {
     const title = page.properties?.title?.title?.[0]?.plain_text ||
                  page.properties?.Name?.title?.[0]?.plain_text ||
                  'Untitled';
-    return { id: page.id, title };
+    return { id: page.id, title, type: 'page' };
   });
+
+  const databases = dbsData.results.map(db => {
+    const title = db.title?.[0]?.plain_text || 'Untitled Database';
+    return { id: db.id, title, type: 'database' };
+  });
+
+  return [...databases, ...pages];
 }
 
 function getSortedPages(query) {
@@ -237,10 +256,14 @@ function createDropdownItem(page, index, isDefault, isRecent) {
   el.dataset.index = index;
   el.dataset.id = page.id;
   el.dataset.title = page.title;
+  el.dataset.type = page.type || 'page';
 
+  const isDb = page.type === 'database';
   let label = page.title;
   if (isDefault) {
     el.innerHTML = `<span class="star-badge">&#9733;</span> ${escapeHtml(label)}`;
+  } else if (isDb) {
+    el.innerHTML = `<span class="db-icon">&#9707;</span> ${escapeHtml(label)}`;
   } else {
     el.textContent = label;
   }
@@ -252,7 +275,7 @@ function createDropdownItem(page, index, isDefault, isRecent) {
     el.appendChild(badge);
   }
 
-  el.addEventListener('click', () => selectPage(page.id, page.title));
+  el.addEventListener('click', () => selectPage(page.id, page.title, page.type));
   el.addEventListener('mouseenter', () => {
     highlightedIndex = index;
     updateHighlight();
@@ -267,8 +290,9 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function selectPage(id, title) {
+function selectPage(id, title, type) {
   document.getElementById('destination').value = id;
+  document.getElementById('destination').dataset.type = type || 'page';
   document.getElementById('destination-search').value = title;
   closeDropdown();
 }
@@ -304,7 +328,7 @@ function handleSearchKeydown(e) {
     e.preventDefault();
     if (highlightedIndex >= 0 && highlightedIndex < count) {
       const item = items[highlightedIndex];
-      selectPage(item.dataset.id, item.dataset.title);
+      selectPage(item.dataset.id, item.dataset.title, item.dataset.type);
     }
   } else if (e.key === 'Escape') {
     closeDropdown();
@@ -361,6 +385,20 @@ async function saveToNotion() {
   try {
     const authData = await chrome.storage.local.get(['notionToken']);
 
+    const destType = document.getElementById('destination').dataset.type || 'page';
+    const isDatabase = destType === 'database';
+
+    const parent = isDatabase
+      ? { database_id: destination }
+      : { page_id: destination };
+
+    // Databases use "Name" (or the first title property), pages use "title"
+    const properties = isDatabase
+      ? { Name: { title: [{ text: { content: title } }] } }
+      : { title: { title: [{ text: { content: title } }] } };
+
+    const body = { parent, properties, children: buildPageContent(title, notes) };
+
     const response = await fetch('https://api.notion.com/v1/pages', {
       method: 'POST',
       headers: {
@@ -368,15 +406,7 @@ async function saveToNotion() {
         'Notion-Version': '2022-06-28',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        parent: { page_id: destination },
-        properties: {
-          title: {
-            title: [{ text: { content: title } }]
-          }
-        },
-        children: buildPageContent(title, notes)
-      })
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) {
