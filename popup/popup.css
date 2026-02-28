@@ -51,47 +51,59 @@ h1 {
 
 /* Page Info */
 .page-info {
-  display: flex;
-  gap: 10px;
   margin-bottom: 16px;
-  padding: 12px;
-  background: #f5f5f5;
-  border-radius: 8px;
-  border: 1px solid #e0e0e0;
+}
+
+.page-info label {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.page-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .favicon {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.page-details {
-  flex: 1;
-  min-width: 0;
 }
 
 .page-title-input {
   width: 100%;
-  background: transparent;
-  border: none;
+  background: #ffffff;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
   color: #333;
   font-size: 14px;
   font-weight: 500;
-  padding: 0;
-  margin-bottom: 4px;
+  padding: 8px 10px;
+  cursor: text;
+  transition: border-color 0.2s;
+}
+
+.page-title-input:hover {
+  border-color: #999;
 }
 
 .page-title-input:focus {
   outline: none;
-  border-bottom: 1px solid #5e6ad2;
+  border-color: #5e6ad2;
+}
+
+.page-title-input::placeholder {
+  color: #aaa;
 }
 
 .page-url {
   display: block;
   font-size: 11px;
   color: #888;
+  margin-top: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
