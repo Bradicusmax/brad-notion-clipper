@@ -31,6 +31,11 @@ async function init() {
     chrome.runtime.openOptionsPage();
   });
 
+  // Select all title text on focus for easy replacement
+  document.getElementById('page-title').addEventListener('focus', (e) => {
+    e.target.select();
+  });
+
   // Search input listeners
   const searchInput = document.getElementById('destination-search');
   searchInput.addEventListener('focus', () => openDropdown());
