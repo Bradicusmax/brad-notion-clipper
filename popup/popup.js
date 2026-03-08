@@ -3,6 +3,8 @@
 let allPages = [];
 let recentPageIds = [];
 let highlightedIndex = -1;
+let currentTabUrl = '';
+let statusTimeout = null;
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -12,7 +14,7 @@ async function init() {
   recentPageIds = stored.recentPages || [];
 
   // Check authentication status
-  const authData = await chrome.storage.local.get(['notionToken', 'notionWorkspaceId']);
+  const authData = await chrome.storage.local.get(['notionToken']);
 
   if (authData.notionToken) {
     showClipSection();
@@ -25,7 +27,7 @@ async function init() {
   // Event listeners
   document.getElementById('auth-btn').addEventListener('click', startAuth);
   document.getElementById('save-btn').addEventListener('click', saveToNotion);
-  document.getElementById('refresh-destinations').addEventListener('click', loadDestinations);
+  document.getElementById('refresh-destinations').addEventListener('click', () => loadDestinations(true));
   document.getElementById('options-link').addEventListener('click', (e) => {
     e.preventDefault();
     chrome.runtime.openOptionsPage();
@@ -65,21 +67,38 @@ function showClipSection() {
 }
 
 async function loadCurrentTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  if (tab) {
-    document.getElementById('page-title').value = tab.title || '';
-    document.getElementById('page-url').textContent = tab.url || '';
+    if (tab) {
+      document.getElementById('page-title').value = tab.title || '';
+      currentTabUrl = tab.url || '';
+      document.getElementById('page-url').textContent = currentTabUrl;
+      document.getElementById('page-url').title = currentTabUrl;
 
-    // Try to get favicon
-    const faviconUrl = `https://www.google.com/s2/favicons?domain=${new URL(tab.url).hostname}&sz=32`;
-    const faviconImg = document.getElementById('favicon');
-    faviconImg.src = faviconUrl;
-    faviconImg.classList.remove('hidden');
+      // Only fetch favicon for http/https pages
+      if (currentTabUrl.startsWith('http://') || currentTabUrl.startsWith('https://')) {
+        const hostname = new URL(currentTabUrl).hostname;
+        const faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+        const faviconImg = document.getElementById('favicon');
+        faviconImg.src = faviconUrl;
+        faviconImg.classList.remove('hidden');
+
+        // Hide if the image fails to load
+        faviconImg.onerror = () => {
+          faviconImg.classList.add('hidden');
+        };
+      }
+    }
+  } catch (err) {
+    // Silently handle restricted pages
+    document.getElementById('page-title').value = '';
+    document.getElementById('page-url').textContent = '';
+    currentTabUrl = '';
   }
 }
 
-async function loadDestinations() {
+async function loadDestinations(forceRefresh = false) {
   const searchInput = document.getElementById('destination-search');
   const refreshBtn = document.getElementById('refresh-destinations');
 
@@ -88,38 +107,50 @@ async function loadDestinations() {
   refreshBtn.disabled = true;
 
   try {
-    const authData = await chrome.storage.local.get(['notionToken', 'notionWorkspaceId']);
+    const authData = await chrome.storage.local.get(['notionToken', 'notionParentPageId']);
 
     if (!authData.notionToken) {
       throw new Error('Not authenticated');
     }
 
-    // Get pages
-    const pages = await fetchNotionPages(authData.notionToken);
+    // Ask background script to fetch (with caching)
+    const response = await chrome.runtime.sendMessage({
+      type: 'FETCH_DESTINATIONS',
+      token: authData.notionToken,
+      forceRefresh: forceRefresh
+    });
 
+    if (!response.success) {
+      throw new Error(response.error);
+    }
+
+    const pages = response.result;
     allPages = [];
 
     // Add default page if set
-    const parentId = await chrome.storage.local.get(['notionParentPageId']);
-    if (parentId.notionParentPageId) {
+    if (authData.notionParentPageId) {
+      // Try to find the actual name of the default page from fetched results
+      const matchingPage = pages.find(p => p.id === authData.notionParentPageId);
+      const defaultTitle = matchingPage ? matchingPage.title : 'Default Page';
       allPages.push({
-        id: parentId.notionParentPageId,
-        title: 'Default Page',
+        id: authData.notionParentPageId,
+        title: defaultTitle,
+        type: matchingPage ? matchingPage.type : 'page',
+        titleProperty: matchingPage ? matchingPage.titleProperty : undefined,
         isDefault: true
       });
     }
 
-    // Add fetched pages
+    // Add fetched pages (skip the default to avoid duplicates)
     pages.forEach(page => {
-      // Skip if it's the same as the default
-      if (parentId.notionParentPageId && page.id === parentId.notionParentPageId) return;
+      if (authData.notionParentPageId && page.id === authData.notionParentPageId) return;
       allPages.push(page);
     });
 
     searchInput.placeholder = 'Search pages...';
 
   } catch (error) {
-    showStatus('Error loading destinations: ' + error.message, 'error');
+    showStatus('Could not load pages. Try the refresh button, or check Settings.', 'error');
     searchInput.placeholder = 'Error loading pages';
   } finally {
     searchInput.disabled = false;
@@ -127,66 +158,14 @@ async function loadDestinations() {
   }
 }
 
-async function fetchNotionPages(token) {
-  // Fetch both pages and databases
-  const [pagesRes, dbsRes] = await Promise.all([
-    fetch('https://api.notion.com/v1/search', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Notion-Version': '2022-06-28',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        filter: { property: 'object', value: 'page' },
-        page_size: 50
-      })
-    }),
-    fetch('https://api.notion.com/v1/search', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Notion-Version': '2022-06-28',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        filter: { property: 'object', value: 'database' },
-        page_size: 50
-      })
-    })
-  ]);
-
-  if (!pagesRes.ok || !dbsRes.ok) {
-    throw new Error('Failed to fetch pages');
-  }
-
-  const [pagesData, dbsData] = await Promise.all([pagesRes.json(), dbsRes.json()]);
-
-  const pages = pagesData.results.map(page => {
-    const title = page.properties?.title?.title?.[0]?.plain_text ||
-                 page.properties?.Name?.title?.[0]?.plain_text ||
-                 'Untitled';
-    return { id: page.id, title, type: 'page' };
-  });
-
-  const databases = dbsData.results.map(db => {
-    const title = db.title?.[0]?.plain_text || 'Untitled Database';
-    return { id: db.id, title, type: 'database' };
-  });
-
-  return [...databases, ...pages];
-}
-
 function getSortedPages(query) {
   const q = query.toLowerCase().trim();
 
-  // Separate pages into groups
   const defaultPages = [];
   const recentPages = [];
   const otherPages = [];
 
   allPages.forEach(page => {
-    // If there's a search query, filter by it
     if (q && !page.title.toLowerCase().includes(q)) return;
 
     if (page.isDefault) {
@@ -218,21 +197,18 @@ function openDropdown() {
 
   let itemIndex = 0;
 
-  // Default page
   defaultPages.forEach(page => {
     const el = createDropdownItem(page, itemIndex, true, false);
     dropdown.appendChild(el);
     itemIndex++;
   });
 
-  // Recent pages
   recentPages.forEach(page => {
     const el = createDropdownItem(page, itemIndex, false, true);
     dropdown.appendChild(el);
     itemIndex++;
   });
 
-  // Other pages
   otherPages.forEach(page => {
     const el = createDropdownItem(page, itemIndex, false, false);
     dropdown.appendChild(el);
@@ -257,13 +233,23 @@ function createDropdownItem(page, index, isDefault, isRecent) {
   el.dataset.id = page.id;
   el.dataset.title = page.title;
   el.dataset.type = page.type || 'page';
+  el.dataset.titleProperty = page.titleProperty || '';
 
   const isDb = page.type === 'database';
-  let label = page.title;
+  const label = page.title;
+
   if (isDefault) {
-    el.innerHTML = `<span class="star-badge">&#9733;</span> ${escapeHtml(label)}`;
+    const star = document.createElement('span');
+    star.className = 'star-badge';
+    star.textContent = '\u2605';
+    el.appendChild(star);
+    el.appendChild(document.createTextNode(' ' + label));
   } else if (isDb) {
-    el.innerHTML = `<span class="db-icon">&#9707;</span> ${escapeHtml(label)}`;
+    const icon = document.createElement('span');
+    icon.className = 'db-icon';
+    icon.textContent = '\u25EB';
+    el.appendChild(icon);
+    el.appendChild(document.createTextNode(' ' + label));
   } else {
     el.textContent = label;
   }
@@ -275,7 +261,7 @@ function createDropdownItem(page, index, isDefault, isRecent) {
     el.appendChild(badge);
   }
 
-  el.addEventListener('click', () => selectPage(page.id, page.title, page.type));
+  el.addEventListener('click', () => selectPage(page.id, page.title, page.type, page.titleProperty));
   el.addEventListener('mouseenter', () => {
     highlightedIndex = index;
     updateHighlight();
@@ -284,15 +270,11 @@ function createDropdownItem(page, index, isDefault, isRecent) {
   return el;
 }
 
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function selectPage(id, title, type) {
-  document.getElementById('destination').value = id;
-  document.getElementById('destination').dataset.type = type || 'page';
+function selectPage(id, title, type, titleProperty) {
+  const dest = document.getElementById('destination');
+  dest.value = id;
+  dest.dataset.type = type || 'page';
+  dest.dataset.titleProperty = titleProperty || '';
   document.getElementById('destination-search').value = title;
   closeDropdown();
 }
@@ -328,7 +310,7 @@ function handleSearchKeydown(e) {
     e.preventDefault();
     if (highlightedIndex >= 0 && highlightedIndex < count) {
       const item = items[highlightedIndex];
-      selectPage(item.dataset.id, item.dataset.title, item.dataset.type);
+      selectPage(item.dataset.id, item.dataset.title, item.dataset.type, item.dataset.titleProperty);
     }
   } else if (e.key === 'Escape') {
     closeDropdown();
@@ -344,17 +326,13 @@ function scrollToHighlighted() {
 }
 
 async function saveRecentPage(pageId) {
-  // Add to front, remove duplicates, keep max 10
   recentPageIds = [pageId, ...recentPageIds.filter(id => id !== pageId)].slice(0, 10);
   await chrome.storage.local.set({ recentPages: recentPageIds });
 }
 
 async function startAuth() {
-  // Open options page for auth setup
-  showStatus('Opening settings to connect Notion...', 'info');
-  setTimeout(() => {
-    chrome.runtime.openOptionsPage();
-  }, 1000);
+  // Open options page immediately — no artificial delay
+  chrome.runtime.openOptionsPage();
 }
 
 async function saveToNotion() {
@@ -367,12 +345,17 @@ async function saveToNotion() {
   const destination = document.getElementById('destination').value;
 
   if (!title) {
-    showStatus('Please enter a title', 'error');
+    showStatus('Please enter a title.', 'error');
     return;
   }
 
   if (!destination) {
-    showStatus('Please select a destination', 'error');
+    showStatus('Please select a destination page.', 'error');
+    return;
+  }
+
+  if (!currentTabUrl) {
+    showStatus('Cannot clip this page. Try a regular website.', 'error');
     return;
   }
 
@@ -385,45 +368,47 @@ async function saveToNotion() {
   try {
     const authData = await chrome.storage.local.get(['notionToken']);
 
-    const destType = document.getElementById('destination').dataset.type || 'page';
-    const isDatabase = destType === 'database';
+    const destEl = document.getElementById('destination');
+    const destType = destEl.dataset.type || 'page';
+    const titleProperty = destEl.dataset.titleProperty || '';
 
-    const parent = isDatabase
-      ? { database_id: destination }
-      : { page_id: destination };
-
-    // Databases use "Name" (or the first title property), pages use "title"
-    const properties = isDatabase
-      ? { Name: { title: [{ text: { content: title } }] } }
-      : { title: { title: [{ text: { content: title } }] } };
-
-    const body = { parent, properties, children: buildPageContent(title, notes) };
-
-    const response = await fetch('https://api.notion.com/v1/pages', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authData.notionToken}`,
-        'Notion-Version': '2022-06-28',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
+    // Delegate saving to background script
+    const response = await chrome.runtime.sendMessage({
+      type: 'SAVE_TO_NOTION',
+      data: {
+        title,
+        notes,
+        url: currentTabUrl,
+        destinationId: destination,
+        destinationType: destType,
+        titleProperty: titleProperty,
+        token: authData.notionToken
+      }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to create page');
+    if (!response.success) {
+      throw new Error(response.error);
     }
 
     // Save as recent page
     await saveRecentPage(destination);
 
-    showStatus('Saved to Notion!', 'success');
+    // Show success with link to the new page
+    const notionUrl = response.result.url;
+    if (notionUrl) {
+      showStatus('Saved to Notion!', 'success', notionUrl);
+    } else {
+      showStatus('Saved to Notion!', 'success');
+    }
 
     // Clear notes
     document.getElementById('notes').value = '';
 
+    // Auto-close popup after a short delay
+    setTimeout(() => window.close(), 2500);
+
   } catch (error) {
-    showStatus('Error: ' + error.message, 'error');
+    showStatus(error.message || 'Something went wrong. Please try again.', 'error');
   } finally {
     saveBtn.disabled = false;
     btnText.classList.remove('hidden');
@@ -431,67 +416,44 @@ async function saveToNotion() {
   }
 }
 
-function buildPageContent(title, notes) {
-  const url = document.getElementById('page-url').textContent;
-  const blocks = [];
+function showStatus(message, type, linkUrl) {
+  const statusEl = document.getElementById('status');
 
-  // Bookmark block
-  blocks.push({
-    object: 'block',
-    type: 'bookmark',
-    bookmark: {
-      url: url,
-      caption: []
-    }
-  });
-
-  // Notes paragraph (if provided)
-  if (notes) {
-    blocks.push({
-      object: 'block',
-      type: 'paragraph',
-      paragraph: {
-        rich_text: [{
-          type: 'text',
-          text: { content: notes }
-        }]
-      }
-    });
-
-    // Separator
-    blocks.push({
-      object: 'block',
-      type: 'divider'
-    });
+  // Clear any previous auto-dismiss timer
+  if (statusTimeout) {
+    clearTimeout(statusTimeout);
+    statusTimeout = null;
   }
 
-  // Timestamp
-  const timestamp = new Date().toLocaleString();
-  blocks.push({
-    object: 'block',
-    type: 'paragraph',
-    paragraph: {
-      rich_text: [{
-        type: 'text',
-        text: { content: `Clipped: ${timestamp}` },
-        annotations: {
-          italic: true,
-          color: 'gray'
-        }
-      }]
-    }
-  });
-
-  return blocks;
-}
-
-function showStatus(message, type) {
-  const statusEl = document.getElementById('status');
-  statusEl.textContent = message;
+  statusEl.innerHTML = '';
   statusEl.className = `status ${type}`;
+
+  const textSpan = document.createElement('span');
+  textSpan.textContent = message;
+  statusEl.appendChild(textSpan);
+
+  // Add "View in Notion" link if available
+  if (linkUrl && type === 'success') {
+    const link = document.createElement('a');
+    link.href = linkUrl;
+    link.textContent = ' View in Notion';
+    link.target = '_blank';
+    link.className = 'status-link';
+    statusEl.appendChild(link);
+  }
+
   statusEl.classList.remove('hidden');
+
+  // Auto-dismiss after 5 seconds for non-error messages
+  if (type !== 'error') {
+    statusTimeout = setTimeout(() => hideStatus(), 5000);
+  }
 }
 
 function hideStatus() {
   document.getElementById('status').classList.add('hidden');
+  if (statusTimeout) {
+    clearTimeout(statusTimeout);
+    statusTimeout = null;
+  }
 }

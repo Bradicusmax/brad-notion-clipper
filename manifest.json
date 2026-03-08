@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Notion Clipper with Notes",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Clip web pages to Notion with custom notes",
   "permissions": [
     "storage",
@@ -13,7 +13,9 @@
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
-      "16": "icons/icon16.png"
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
   },
   "background": {
@@ -21,6 +23,8 @@
   },
   "options_page": "options/options.html",
   "icons": {
-    "16": "icons/icon16.png"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 }
