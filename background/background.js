@@ -3,6 +3,11 @@
 
 const CACHE_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
+// Common names users give to URL-type and notes/description-type columns.
+// Used as a fallback when matching database properties by name.
+const URL_PROPERTY_NAMES = ['url', 'link', 'website', 'source', 'source url', 'page url', 'web address'];
+const NOTES_PROPERTY_NAMES = ['description', 'notes', 'note', 'summary', 'details', 'comments', 'comment', 'memo', 'text', 'content', 'body'];
+
 // Handle installation
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Notion Clipper installed');
@@ -133,22 +138,28 @@ async function fetchNotionPages(token) {
     });
 
     const databases = dbsData.results.map(db => {
-      // Find the title property name for this database.
-      // Notion databases can name their title column anything (e.g. "Name",
-      // "Title", "Bookmark", etc.). We detect it by looking for the property
-      // with type === 'title'.
+      // Scan ALL properties of this database so we can intelligently map
+      // the clipped URL and notes to the right columns when saving.
+      const propertyMap = {};
       let titlePropertyName = 'Name'; // default fallback
+
       if (db.properties) {
         for (const [propName, propConfig] of Object.entries(db.properties)) {
+          propertyMap[propName] = propConfig.type;
           if (propConfig.type === 'title') {
             titlePropertyName = propName;
-            break;
           }
         }
       }
 
       const title = db.title?.[0]?.plain_text || 'Untitled Database';
-      return { id: db.id, title, type: 'database', titleProperty: titlePropertyName };
+      return {
+        id: db.id,
+        title,
+        type: 'database',
+        titleProperty: titlePropertyName,
+        propertyMap  // e.g. { "Name": "title", "URL": "url", "Description": "rich_text", "Tags": "multi_select" }
+      };
     });
 
     return [...databases, ...pages];
@@ -158,8 +169,48 @@ async function fetchNotionPages(token) {
   }
 }
 
+// --- Smart Property Matching ---
+
+// Given a database's property map, find the best property to store the URL.
+// Strategy: first look for a property of type "url", then fall back to
+// matching common column names.
+function findUrlProperty(propertyMap) {
+  // Priority 1: Any property with Notion type "url"
+  for (const [name, type] of Object.entries(propertyMap)) {
+    if (type === 'url') {
+      return { name, type };
+    }
+  }
+
+  // Priority 2: A rich_text property whose name matches common URL-ish names
+  for (const [name, type] of Object.entries(propertyMap)) {
+    if (type === 'rich_text' && URL_PROPERTY_NAMES.includes(name.toLowerCase().trim())) {
+      return { name, type };
+    }
+  }
+
+  return null;
+}
+
+// Given a database's property map, find the best property to store the notes.
+// Strategy: look for a rich_text property whose name matches common
+// description/notes names. Skip the title property (that's for the page title).
+function findNotesProperty(propertyMap, titlePropertyName) {
+  // Look for a rich_text property with a common notes/description name
+  for (const [name, type] of Object.entries(propertyMap)) {
+    if (type === 'rich_text' && name !== titlePropertyName &&
+        NOTES_PROPERTY_NAMES.includes(name.toLowerCase().trim())) {
+      return { name, type };
+    }
+  }
+
+  return null;
+}
+
+// --- Save Logic ---
+
 async function saveToNotion(data) {
-  const { title, notes, url, destinationId, destinationType, titleProperty, token } = data;
+  const { title, notes, url, destinationId, destinationType, titleProperty, propertyMap, token } = data;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
@@ -177,21 +228,48 @@ async function saveToNotion(data) {
       [propName]: { title: [{ text: { content: title } }] }
     };
 
-    // Build the content blocks (bookmark, notes, timestamp).
+    // For databases, try to fill in additional property columns automatically.
+    if (isDatabase && propertyMap) {
+      // Find and populate the URL property
+      const urlProp = findUrlProperty(propertyMap);
+      if (urlProp && url) {
+        if (urlProp.type === 'url') {
+          // Notion "url" type: simple string value
+          properties[urlProp.name] = { url: url };
+        } else if (urlProp.type === 'rich_text') {
+          // Fallback: store URL as rich text
+          properties[urlProp.name] = {
+            rich_text: [{ type: 'text', text: { content: url } }]
+          };
+        }
+      }
+
+      // Find and populate the Notes/Description property
+      const notesProp = findNotesProperty(propertyMap, propName);
+      if (notesProp && notes) {
+        properties[notesProp.name] = {
+          rich_text: [{ type: 'text', text: { content: notes } }]
+        };
+      }
+    }
+
+    // Build the content blocks (bookmark, notes, timestamp) for the page body.
+    // These go INSIDE the page as visible content, in addition to the property
+    // fields above. This way the user sees a nice formatted view when they
+    // open the page, AND the database columns are populated for filtering/sorting.
     const children = buildContentBlocks(url, notes);
 
-    // The Notion API accepts 'children' for BOTH regular pages and database
-    // entries in a single create-page request. There is no need for a two-step
-    // approach. Everything goes in one call.
     const requestBody = { parent, properties, children };
 
     console.log('[Notion Clipper] Saving to Notion:', {
       destinationType,
       destinationId,
-      propName,
+      titleProp: propName,
+      propertiesSet: Object.keys(properties),
       childrenCount: children.length,
       hasUrl: !!url,
-      hasNotes: !!notes
+      hasNotes: !!notes,
+      propertyMap: propertyMap || 'N/A (regular page)'
     });
 
     const response = await fetch('https://api.notion.com/v1/pages', {
@@ -297,8 +375,6 @@ function friendlyError(raw) {
     return 'There was a conflict saving to Notion. Please try again.';
   }
 
-  // Pass through the raw Notion error message so the user sees the real problem.
-  // Previously this was catching 'validation' and 'invalid' keywords and replacing
-  // them with a generic message, which hid the actual error from Notion.
+  // Pass through the raw Notion error so the user sees the real problem.
   return raw || 'Something went wrong. Please try again.';
 }

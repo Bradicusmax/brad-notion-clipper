@@ -137,6 +137,7 @@ async function loadDestinations(forceRefresh = false) {
         title: defaultTitle,
         type: matchingPage ? matchingPage.type : 'page',
         titleProperty: matchingPage ? matchingPage.titleProperty : undefined,
+        propertyMap: matchingPage ? matchingPage.propertyMap : undefined,
         isDefault: true
       });
     }
@@ -372,6 +373,12 @@ async function saveToNotion() {
     const destType = destEl.dataset.type || 'page';
     const titleProperty = destEl.dataset.titleProperty || '';
 
+    // Look up the full page data from allPages to get the propertyMap.
+    // The propertyMap is an object that can't be stored in HTML dataset
+    // attributes, so we retrieve it from the original data array.
+    const selectedPage = allPages.find(p => p.id === destination);
+    const propertyMap = selectedPage ? selectedPage.propertyMap : undefined;
+
     // Delegate saving to background script
     const response = await chrome.runtime.sendMessage({
       type: 'SAVE_TO_NOTION',
@@ -382,6 +389,7 @@ async function saveToNotion() {
         destinationId: destination,
         destinationType: destType,
         titleProperty: titleProperty,
+        propertyMap: propertyMap,
         token: authData.notionToken
       }
     });
