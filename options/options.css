@@ -6,13 +6,13 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background: #1a1a1a;
-  color: #ffffff;
+  background: #f8f8f8;
+  color: #333333;
   min-width: 400px;
 }
 
 .container {
-  padding: 20px;
+  padding: 24px;
   max-width: 600px;
   margin: 0 auto;
 }
@@ -20,35 +20,40 @@ body {
 header {
   margin-bottom: 24px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #e0e0e0;
 }
 
 h1 {
   font-size: 20px;
+  font-weight: 600;
+  color: #333;
 }
 
 h2 {
   font-size: 16px;
+  font-weight: 600;
   margin-bottom: 12px;
-  color: #fff;
+  color: #333;
 }
 
 h3 {
   font-size: 14px;
+  font-weight: 500;
   margin-bottom: 8px;
-  color: #ddd;
+  color: #555;
 }
 
 .section {
   margin-bottom: 24px;
-  padding: 16px;
-  background: #242424;
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e8e8e8;
   border-radius: 12px;
 }
 
 .section p {
   font-size: 13px;
-  color: #999;
+  color: #666;
   margin-bottom: 16px;
 }
 
@@ -65,7 +70,8 @@ h3 {
 
 .method {
   padding: 16px;
-  background: #1a1a1a;
+  background: #f8f8f8;
+  border: 1px solid #e8e8e8;
   border-radius: 8px;
 }
 
@@ -81,18 +87,23 @@ h3 {
 .form-group label {
   display: block;
   font-size: 13px;
-  color: #999;
+  color: #666;
   margin-bottom: 6px;
 }
 
 .form-group input {
   width: 100%;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 6px;
-  color: #fff;
+  background: #ffffff;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  color: #333;
   font-size: 14px;
   padding: 10px;
+  transition: border-color 0.2s;
+}
+
+.form-group input:hover {
+  border-color: #999;
 }
 
 .form-group input:focus {
@@ -103,7 +114,7 @@ h3 {
 .form-group small {
   display: block;
   font-size: 11px;
-  color: #666;
+  color: #999;
   margin-top: 6px;
 }
 
@@ -119,7 +130,7 @@ h3 {
   justify-content: center;
   padding: 10px 16px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -135,22 +146,30 @@ h3 {
   background: #4a5abc;
 }
 
+.btn-primary:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
 .btn-secondary {
-  background: #333;
-  color: #fff;
+  background: #f0f0f0;
+  color: #555;
+  border: 1px solid #d0d0d0;
 }
 
 .btn-secondary:hover {
-  background: #444;
+  background: #e4e4e4;
 }
 
 .btn-danger {
-  background: #c62828;
-  color: #fff;
+  background: #fff;
+  color: #c62828;
+  border: 1px solid #e0b0b0;
 }
 
 .btn-danger:hover {
-  background: #b71c1c;
+  background: rgba(198, 40, 40, 0.06);
+  border-color: #c62828;
 }
 
 /* Connected Status */
@@ -159,14 +178,35 @@ h3 {
   align-items: center;
   gap: 10px;
   padding: 12px;
-  background: rgba(46, 125, 50, 0.2);
+  background: rgba(46, 125, 50, 0.08);
+  border: 1px solid rgba(46, 125, 50, 0.2);
   border-radius: 8px;
   margin-bottom: 12px;
 }
 
 .check {
-  color: #81c784;
+  color: #2e7d32;
   font-size: 18px;
+  font-weight: 700;
+}
+
+/* Settings Summary */
+.settings-summary {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: #f8f8f8;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #888;
+}
+
+.summary-line {
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.summary-line:last-child {
+  margin-bottom: 0;
 }
 
 /* Instructions */
@@ -176,7 +216,7 @@ h3 {
 
 .instructions li {
   font-size: 13px;
-  color: #999;
+  color: #666;
   margin-bottom: 8px;
   line-height: 1.5;
 }
@@ -190,14 +230,46 @@ h3 {
   text-decoration: underline;
 }
 
+/* Options Status */
+.options-status {
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: center;
+  margin-top: 16px;
+  transition: opacity 0.3s;
+}
+
+.options-status.success {
+  background: rgba(46, 125, 50, 0.08);
+  color: #2e7d32;
+  border: 1px solid rgba(46, 125, 50, 0.2);
+}
+
+.options-status.error {
+  background: rgba(198, 40, 40, 0.08);
+  color: #c62828;
+  border: 1px solid rgba(198, 40, 40, 0.2);
+}
+
+.options-status.info {
+  background: rgba(2, 119, 189, 0.08);
+  color: #0277bd;
+  border: 1px solid rgba(2, 119, 189, 0.2);
+}
+
+.options-status.hidden {
+  display: none !important;
+}
+
 /* Footer */
 footer {
   text-align: center;
   padding-top: 16px;
-  border-top: 1px solid #333;
+  border-top: 1px solid #e0e0e0;
 }
 
 #version {
   font-size: 12px;
-  color: #666;
+  color: #999;
 }

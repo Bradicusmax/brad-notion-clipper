@@ -9,25 +9,19 @@
 <body>
   <div class="container">
     <header>
-      <h1>⚙️ Settings</h1>
+      <h1>Settings</h1>
     </header>
 
     <!-- Auth Section -->
     <section id="auth-section" class="section">
       <h2>Notion Connection</h2>
       <p>Connect your Notion account to start clipping web pages.</p>
-      
+
       <div class="auth-methods">
         <div class="method">
-          <h3>Method 1: Internal Integration (Recommended)</h3>
-          <p>Simpler setup for personal use. You'll need a Notion API token.</p>
-          <button id="internal-btn" class="btn btn-primary">Set Up Internal Token</button>
-        </div>
-        
-        <div class="method">
-          <h3>Method 2: OAuth (Coming Soon)</h3>
-          <p>Sign in with Notion. Required for distribution.</p>
-          <button id="oauth-btn" class="btn btn-secondary" disabled>Not Available</button>
+          <h3>Internal Integration (Recommended)</h3>
+          <p>Simple setup for personal use. You will need a Notion API token.</p>
+          <button id="internal-btn" class="btn btn-primary">Set Up Token</button>
         </div>
       </div>
     </section>
@@ -36,24 +30,24 @@
     <section id="token-section" class="section hidden">
       <h2>Enter Your Notion Token</h2>
       <p>Get your token from <a href="https://www.notion.so/my-integrations" target="_blank">notion.so/my-integrations</a></p>
-      
+
       <div class="form-group">
         <label for="api-token">API Token</label>
         <input type="password" id="api-token" placeholder="secret_...">
       </div>
-      
+
       <div class="form-group">
         <label for="workspace-id">Workspace ID (optional)</label>
         <input type="text" id="workspace-id" placeholder="Your workspace ID">
         <small>Used as parent for new pages. Get it from your Notion URL.</small>
       </div>
-      
+
       <div class="form-group">
         <label for="parent-page-id">Default Parent Page ID</label>
         <input type="text" id="parent-page-id" placeholder="Page ID to save clips under">
         <small>Open the page in Notion, copy the ID from the URL.</small>
       </div>
-      
+
       <div class="button-group">
         <button id="save-token-btn" class="btn btn-primary">Save</button>
         <button id="cancel-token-btn" class="btn btn-secondary">Cancel</button>
@@ -63,15 +57,40 @@
     <!-- Connected Section -->
     <section id="connected-section" class="section hidden">
       <div class="connected-status">
-        <span class="check">✓</span>
+        <span class="check">&#10003;</span>
         <span>Connected to Notion</span>
       </div>
-      <button id="disconnect-btn" class="btn btn-danger">Disconnect</button>
+      <div id="settings-summary" class="settings-summary"></div>
+      <div class="button-group">
+        <button id="edit-settings-btn" class="btn btn-secondary">Edit Settings</button>
+        <button id="disconnect-btn" class="btn btn-danger">Disconnect</button>
+      </div>
+    </section>
+
+    <!-- Edit Settings Section (shown when user clicks Edit Settings) -->
+    <section id="edit-settings-section" class="section hidden">
+      <h2>Edit Settings</h2>
+      <p>Update your workspace or default page without disconnecting.</p>
+
+      <div class="form-group">
+        <label for="edit-workspace-id">Workspace ID (optional)</label>
+        <input type="text" id="edit-workspace-id" placeholder="Your workspace ID">
+      </div>
+
+      <div class="form-group">
+        <label for="edit-parent-page-id">Default Parent Page ID</label>
+        <input type="text" id="edit-parent-page-id" placeholder="Page ID to save clips under">
+      </div>
+
+      <div class="button-group">
+        <button id="save-settings-btn" class="btn btn-primary">Save Changes</button>
+        <button id="cancel-settings-btn" class="btn btn-secondary">Cancel</button>
+      </div>
     </section>
 
     <!-- Instructions -->
     <section class="section">
-      <h2>📖 How to Get Your Token</h2>
+      <h2>How to Get Your Token</h2>
       <ol class="instructions">
         <li>Go to <a href="https://www.notion.so/my-integrations" target="_blank">notion.so/my-integrations</a></li>
         <li>Click "New integration"</li>
