@@ -82,8 +82,13 @@ async function fetchDestinations(token, forceRefresh = false) {
 }
 
 async function fetchNotionPages(token) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  // Bug fix: use SEPARATE AbortControllers for each fetch.
+  // A single shared controller would cancel the second request the moment
+  // the first one completes, causing intermittent "aborted" errors.
+  const controller1 = new AbortController();
+  const controller2 = new AbortController();
+  const timeout1 = setTimeout(() => controller1.abort(), 15000);
+  const timeout2 = setTimeout(() => controller2.abort(), 15000);
 
   try {
     const [pagesRes, dbsRes] = await Promise.all([
@@ -98,7 +103,7 @@ async function fetchNotionPages(token) {
           filter: { property: 'object', value: 'page' },
           page_size: 100
         }),
-        signal: controller.signal
+        signal: controller1.signal
       }),
       fetch('https://api.notion.com/v1/search', {
         method: 'POST',
@@ -111,7 +116,7 @@ async function fetchNotionPages(token) {
           filter: { property: 'object', value: 'database' },
           page_size: 100
         }),
-        signal: controller.signal
+        signal: controller2.signal
       })
     ]);
 
@@ -146,7 +151,8 @@ async function fetchNotionPages(token) {
 
     return [...databases, ...pages];
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timeout1);
+    clearTimeout(timeout2);
   }
 }
 
@@ -162,13 +168,24 @@ async function saveToNotion(data) {
       ? { database_id: destinationId }
       : { page_id: destinationId };
 
-    // Use the actual title property name for databases (detected during fetch)
+    // Use the actual title property name for databases (detected during fetch).
+    // For regular pages, Notion requires the property key to literally be 'title'.
     const propName = isDatabase ? (titleProperty || 'Name') : 'title';
     const properties = {
       [propName]: { title: [{ text: { content: title } }] }
     };
 
-    const body = { parent, properties, children: buildContentBlocks(title, url, notes) };
+    // Bug fix: When saving to a DATABASE, the Notion API does NOT accept a
+    // 'children' array in the same create-page request. Sending children to a
+    // database entry causes a validation error (which was showing as the
+    // "Notion could not process the request" message). The fix is to create
+    // the page first, then append the content blocks in a second API call.
+    const createBody = { parent, properties };
+
+    // For regular pages, children CAN be included in the initial request.
+    if (!isDatabase) {
+      createBody.children = buildContentBlocks(title, url, notes);
+    }
 
     const response = await fetch('https://api.notion.com/v1/pages', {
       method: 'POST',
@@ -177,16 +194,48 @@ async function saveToNotion(data) {
         'Notion-Version': '2022-06-28',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(createBody),
       signal: controller.signal
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to save to Notion');
+      // Bug fix: read the raw Notion error BEFORE passing through friendlyError,
+      // so we get the actual Notion message (e.g. the real property name mismatch)
+      // rather than a generic fallback. The caller's catch block runs friendlyError.
+      const errorData = await response.json();
+      const rawMessage = errorData.message || errorData.code || 'Failed to save to Notion';
+      throw new Error(rawMessage);
     }
 
-    return await response.json();
+    const createdPage = await response.json();
+
+    // For database entries: append content blocks in a second request.
+    if (isDatabase) {
+      const blocks = buildContentBlocks(title, url, notes);
+      if (blocks.length > 0) {
+        const patchController = new AbortController();
+        const patchTimeout = setTimeout(() => patchController.abort(), 20000);
+        try {
+          await fetch(`https://api.notion.com/v1/blocks/${createdPage.id}/children`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Notion-Version': '2022-06-28',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ children: blocks }),
+            signal: patchController.signal
+          });
+          // Non-fatal: if block append fails, the page was still created successfully.
+        } catch (patchErr) {
+          console.warn('Could not append content blocks to database entry:', patchErr.message);
+        } finally {
+          clearTimeout(patchTimeout);
+        }
+      }
+    }
+
+    return createdPage;
   } finally {
     clearTimeout(timeout);
   }
